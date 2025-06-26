@@ -252,27 +252,37 @@ class OffboardControl(Node):
         
     #publishes offboard control modes and velocity as trajectory setpoints
     def cmdloop_callback(self):
-        if(self.offboardMode == True):
+        if self.offboardMode:
             # Publish offboard control modes
             offboard_msg = OffboardControlMode()
             offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
             offboard_msg.position = False
             offboard_msg.velocity = True
             offboard_msg.acceleration = False
-            self.publisher_offboard_mode.publish(offboard_msg)            
-
-            # Compute velocity in the world frame
-            cos_yaw = np.cos(self.trueYaw)
-            sin_yaw = np.sin(self.trueYaw)
-            velocity_world_x = (self.velocity.x * cos_yaw - self.velocity.y * sin_yaw)
-            velocity_world_y = (self.velocity.x * sin_yaw + self.velocity.y * cos_yaw)
-
+            self.publisher_offboard_mode.publish(offboard_msg)
+    
+            # HOVER FEATURE: Check if hover is activated
+            # Assuming hover is triggered by setting velocity.z to a specific flag (e.g., `0.0`)
+            if self.velocity.z == 0.0:
+                # Maintain hover by setting all velocities to 0
+                velocity_world_x = 0.0
+                velocity_world_y = 0.0
+                velocity_world_z = 0.0  # Maintain current altitude
+                self.get_logger().info("Hovering: Maintaining position and altitude.")
+            else:
+                # Compute velocity in the world frame
+                cos_yaw = np.cos(self.trueYaw)
+                sin_yaw = np.sin(self.trueYaw)
+                velocity_world_x = (self.velocity.x * cos_yaw - self.velocity.y * sin_yaw)
+                velocity_world_y = (self.velocity.x * sin_yaw + self.velocity.y * cos_yaw)
+                velocity_world_z = self.velocity.z
+    
             # Create and publish TrajectorySetpoint message with NaN values for position and acceleration
             trajectory_msg = TrajectorySetpoint()
             trajectory_msg.timestamp = int(Clock().now().nanoseconds / 1000)
             trajectory_msg.velocity[0] = velocity_world_x
             trajectory_msg.velocity[1] = velocity_world_y
-            trajectory_msg.velocity[2] = self.velocity.z
+            trajectory_msg.velocity[2] = velocity_world_z
             trajectory_msg.position[0] = float('nan')
             trajectory_msg.position[1] = float('nan')
             trajectory_msg.position[2] = float('nan')
@@ -281,8 +291,9 @@ class OffboardControl(Node):
             trajectory_msg.acceleration[2] = float('nan')
             trajectory_msg.yaw = float('nan')
             trajectory_msg.yawspeed = self.yaw
-
+    
             self.publisher_trajectory.publish(trajectory_msg)
+
 
 
 def main(args=None):
